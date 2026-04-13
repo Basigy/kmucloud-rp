@@ -1,0 +1,9 @@
+{
+  "name": "generate-case",
+  "version": "1.0.0",
+  "description": "The Verdict - 사건 생성 Lambda",
+  "main": "index.js",
+  "dependencies": {
+    "mysql2": "^3.9.0"
+  }
+}

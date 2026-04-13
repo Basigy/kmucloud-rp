@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: The Verdict - AI 추리 게임 백엔드 (v2 - AP 기반 비주얼 노벨)
+
+# ── 파라미터 ────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, dev]
+
+# ── 전역 설정 ──────────────────────────────────────────────
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+        CASES_TABLE: !Ref CasesTable
+        BEDROCK_MODEL: anthropic.claude-3-5-sonnet-20241022-v2:0
+
+# ── 리소스 ────────────────────────────────────────────────
+Resources:
+
+  # ── API Gateway ──────────────────────────────────────────
+  VerdictApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: NONE
+
+  # ── Lambda: 사건 생성 ────────────────────────────────────
+  GenerateCaseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: lambda/generate-case/
+      Description: Bedrock으로 비주얼 노벨 살인 사건 생성
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - AmazonBedrockFullAccess
+        - AmazonDynamoDBFullAccess
+      Events:
+        GenerateCase:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /generate
+            Method: POST
+        GenerateCaseOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /generate
+            Method: OPTIONS
+
+  # ── Lambda: 장소 조사 ────────────────────────────────────
+  InvestigateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: lambda/investigate/
+      Description: Bedrock으로 조사 발견 텍스트 생성 + 진행 저장
+      Policies:
+        - AmazonBedrockFullAccess
+        - AmazonDynamoDBFullAccess
+      Events:
+        Investigate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /investigate
+            Method: POST
+        InvestigateOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /investigate
+            Method: OPTIONS
+
+  # ── Lambda: 심문 ─────────────────────────────────────────
+  InterrogateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: lambda/interrogate/
+      Description: Bedrock으로 동적 심문 응답 생성 + 대화 이력 저장
+      Policies:
+        - AmazonBedrockFullAccess
+        - AmazonDynamoDBFullAccess
+      Events:
+        Interrogate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /interrogate
+            Method: POST
+        InterrogateOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /interrogate
+            Method: OPTIONS
+
+  # ── Lambda: 기소 평가 ────────────────────────────────────
+  EvaluateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: lambda/evaluate/
+      Description: 기소 평가 + Bedrock 극적 결말 생성 + 결과 저장
+      Timeout: 45
+      Policies:
+        - AmazonBedrockFullAccess
+        - AmazonDynamoDBFullAccess
+      Events:
+        Evaluate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /evaluate
+            Method: POST
+        EvaluateOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VerdictApi
+            Path: /evaluate
+            Method: OPTIONS
+
+  # ── DynamoDB: 리더보드 테이블 ───────────────────────────
+  LeaderboardTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: the-verdict-leaderboard
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: the-verdict
+
+  # ── DynamoDB 테이블 ──────────────────────────────────────
+  CasesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: the-verdict-cases
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: the-verdict
+        - Key: Environment
+          Value: !Ref Environment
+
+# ── 출력 ──────────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: API Gateway 엔드포인트 URL
+    Value: !Sub 'https://${VerdictApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: VerdictApiUrl
+
+  GenerateCaseUrl:
+    Description: 사건 생성 엔드포인트
+    Value: !Sub 'https://${VerdictApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/generate'
+
+  InvestigateUrl:
+    Description: 조사 엔드포인트
+    Value: !Sub 'https://${VerdictApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/investigate'
+
+  InterrogateUrl:
+    Description: 심문 엔드포인트
+    Value: !Sub 'https://${VerdictApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/interrogate'
+
+  EvaluateUrl:
+    Description: 기소 평가 엔드포인트
+    Value: !Sub 'https://${VerdictApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/evaluate'
+
+  CasesTableName:
+    Description: DynamoDB 테이블 이름
+    Value: !Ref CasesTable

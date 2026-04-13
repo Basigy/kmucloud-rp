@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+backend/lambda/*/node_modules/
+
+# next.js
+.next/
+out/
+
+# env files
+.env
+.env.local
+.env*.local
+
+# build
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# lambda zip
+infra/*.zip
+
+# os
+.DS_Store
+Thumbs.db
+
+# debug
+npm-debug.log*
+
+# misc
+*.pem
+the-verdict.zip

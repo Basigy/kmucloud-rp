@@ -1,0 +1,9 @@
+{
+  "name": "the-verdict-api",
+  "version": "1.0.0",
+  "description": "The Verdict - 통합 Lambda API",
+  "main": "index.js",
+  "dependencies": {
+    "mysql2": "^3.9.0"
+  }
+}

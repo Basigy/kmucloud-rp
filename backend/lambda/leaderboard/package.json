@@ -1,0 +1,9 @@
+{
+  "name": "the-verdict-leaderboard",
+  "version": "1.0.0",
+  "description": "리더보드 Lambda (RDS)",
+  "main": "index.js",
+  "dependencies": {
+    "mysql2": "^3.9.0"
+  }
+}
