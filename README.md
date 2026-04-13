@@ -1,158 +1,109 @@
-# 🕵️ The Verdict: 72시간의 함정
+# 🕵️ The Verdict - AI 추리 게임
 
-> **추리 소설의 정수를 구현한 AI 기반 동적 수사 게임**
+Google Gemini AI가 매번 새로운 살인 사건을 생성하고, 플레이어가 제한된 행동 포인트 안에서 증거를 수집하고 용의자를 심문하여 범인을 찾아내는 비주얼 노벨 스타일 추리 게임입니다.
 
-## 🚀 즉시 실행 (1단계 MVP)
+## 🌐 접속 주소
+
+**http://107.23.137.237:3000**
+
+---
+
+## 사용한 AWS 리소스
+
+| AWS 서비스 | 용도 | 상세 |
+|-----------|------|------|
+| **EC2** (t3.medium) | Next.js 프론트엔드 호스팅 | Amazon Linux 2023, PM2로 프로세스 관리 |
+| **Lambda** (1개, 통합) | 백엔드 API 처리 | generate / investigate / interrogate / evaluate / leaderboard 5개 엔드포인트를 단일 함수에서 라우팅 |
+| **API Gateway** (REST API) | Lambda 엔드포인트 노출 | `{proxy+}` 프록시 리소스로 모든 경로를 Lambda에 전달 |
+| **RDS** (MySQL) | 게임 데이터 저장 | 사건 데이터, 게임 진행, 심문 이력, 결과, 리더보드 (기존 RDS 인스턴스 사용) |
+| **S3** | 정적 자산 저장 | 증거 이미지 등 게임 리소스 |
+
+### 외부 서비스
+
+| 서비스 | 용도 |
+|--------|------|
+| **Google Gemini API** (gemini-2.0-flash) | AI 사건 생성, 심문 동적 응답, 결말 내레이션 생성 |
+
+---
+
+## 아키텍처
+
+```
+[브라우저] → [EC2 - Next.js] → [API Gateway] → [Lambda (통합)] → [Gemini AI]
+                  ↓                                    ↓
+                [S3]                              [RDS MySQL]
+```
+
+---
+
+## 실행 방법
+
+### 1. 로컬 실행 (더미 데이터 모드, AWS 불필요)
 
 ```bash
+git clone https://github.com/{레포주소}.git
 cd the-verdict
 npm install
 npm run dev
 ```
 
-브라우저에서 [http://localhost:3000](http://localhost:3000) 접속
+http://localhost:3000 접속 — Gemini API 키 없이도 더미 사건 데이터로 플레이 가능합니다.
 
----
+### 2. AWS 배포 실행
 
-## 📁 프로젝트 구조
+상세 배포 가이드: [infra/DEPLOY-GUIDE.md](infra/DEPLOY-GUIDE.md)
 
-```
-the-verdict/
-├── app/
-│   ├── page.tsx                    # 메인 화면 (난이도 선택)
-│   ├── layout.tsx                  # 루트 레이아웃
-│   ├── globals.css                 # 전역 스타일 (Noir 테마)
-│   └── game/[caseId]/page.tsx      # 게임 메인 (상태 관리)
-│   └── api/
-│       ├── generate/route.ts       # 사건 생성 API
-│       └── interrogate/route.ts    # 심문 API
-├── components/
-│   ├── CommandCenter.tsx           # 지휘실 (타이머, 명성, 뉴스)
-│   ├── SceneInvestigation.tsx      # 현장 조사 (증거 수집)
-│   ├── EvidenceBoard.tsx           # 증거 보드 (드래그앤드롭)
-│   ├── InterrogationRoom.tsx       # 심문실
-│   └── Accusation.tsx              # 기소 + 결과
-├── lib/
-│   ├── dummy-data.ts               # MVP 더미 사건 (재벌가의 비극)
-│   ├── game-logic.ts               # 점수/타이머/심문 로직
-│   ├── bedrock.ts                  # AWS Bedrock 연동 (2단계)
-│   └── utils.ts                    # 유틸리티
-├── types/
-│   └── game.ts                     # TypeScript 타입 정의
-└── backend/                        # AWS Lambda + SAM (3단계)
-    ├── lambda/
-    │   ├── generate-case/
-    │   ├── interrogate/
-    │   └── evaluate/
-    ├── template.yaml               # SAM 템플릿
-    └── deploy.sh                   # 배포 스크립트
-```
+**요약:**
+1. Gemini API 키 준비
+2. S3 버킷 생성
+3. RDS에 스키마 실행 (`infra/rds-schema.sql`)
+4. Lambda 패키징 (`bash infra/package-lambda.sh`) → 콘솔에서 zip 업로드
+5. API Gateway 생성 → `{proxy+}` 프록시로 Lambda 연결 → prod 스테이지 배포
+6. EC2 생성 → 코드 업로드 → `npm install && npm run build && pm2 start npm --name the-verdict -- start`
 
----
+### 환경변수 (.env.local)
 
-## 🎮 게임 플레이 가이드
-
-### 탭 구성
-| 탭 | 설명 |
-|---|---|
-| 📡 지휘실 | 타이머, 명성 점수, 실시간 뉴스 피드, 사건 개요 |
-| 🔍 현장조사 | 장소 탐색 → 증거 클릭으로 수집 |
-| 🗂️ 증거보드 | 카드 드래그 배치 + 🔗 버튼으로 증거 연결 |
-| 🎤 심문실 | 용의자 선택 → 질문 → 증거 제시 → 심문 |
-| ⚖️ 기소 | 범인 선택 + 증거 제시 + 이유 작성 → 결과 |
-
-### 게임 규칙
-- ⏱ **30분** 안에 범인을 찾아야 합니다 (게임 내 72시간)
-- ⭐ **명성 100점** 시작, 잘못된 기소 시 -30점
-- 🎤 용의자당 **최대 3회** 심문 가능
-- 📦 증거 수집 시 +2점, 연결 시 +3점
-
-### 수사 팁
-1. **현장조사** 탭에서 모든 장소를 탐색해 증거를 수집하세요
-2. **증거보드**에서 증거 간 연관성을 파악하세요
-3. 결정적 증거(CCTV, 독극물병)를 들고 **심문**하면 효과적입니다
-4. 스트레스가 85% 이상이면 범인이 흔들립니다
-
----
-
-## ⚙️ 단계별 설정
-
-### 1단계 (MVP) - 즉시 실행
-```bash
-npm install && npm run dev
-```
-더미 데이터(재벌가의 비극)로 전체 게임 플레이 가능.
-
-### 2단계 - AWS Bedrock 연동
-
-```bash
-cp .env.example .env.local
-# .env.local에 AWS 자격 증명 입력
-```
-
-```.env.local
+```env
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+NEXT_PUBLIC_API_URL=https://your-api-gateway.execute-api.us-east-1.amazonaws.com/prod
+DB_HOST=your-rds-endpoint
+DB_PORT=3306
+DB_NAME=the_verdict
+DB_USER=admin
+DB_PASSWORD=your_password
+S3_BUCKET_NAME=your-bucket-name
 ```
 
-`app/api/generate/route.ts`와 `app/api/interrogate/route.ts`에서 Bedrock 코드 블록 주석 해제.
+---
 
-**필요한 AWS IAM 권한:**
-- `bedrock:InvokeModel` on `anthropic.claude-3-5-sonnet-20241022-v2:0`
+## 테스트 방법
 
-### 3단계 - AWS 배포
+### 게임 플레이 테스트
+
+1. http://107.23.137.237:3000 접속
+2. 난이도 선택 (초급 권장 — 용의자 3명, AP 40)
+3. 장소를 이동하며 조사 항목 클릭 → 증거 수집
+4. 용의자 심문 → 스트레스 수치 확인
+5. AP 소진 또는 준비 완료 시 → 기소 (범인 + 동기 + 방법 선택)
+6. 결과 확인 → 리더보드 등록
+
+### 샘플 데이터
+
+Gemini API 연결 없이도 더미 사건 "재벌가의 비극"으로 테스트 가능합니다:
+- 피해자: 박성철 (재벌 회장)
+- 용의자 3명: 박지수 (딸), 김철수 (주치의), 이영희 (가정부)
+- 정답: 김철수 / 의료 과실 폭로 위협 / 염화칼륨 정맥 주사
+
+### API 테스트
 
 ```bash
-# AWS CLI + SAM CLI 설치 필요
-pip install aws-sam-cli
+# 사건 생성
+curl -X POST http://107.23.137.237:3000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"difficulty":"easy"}'
 
-cd backend
-./deploy.sh
+# 리더보드 조회
+curl http://107.23.137.237:3000/api/leaderboard?difficulty=all
 ```
-
-SAM이 자동으로:
-- Lambda 함수 3개 생성 (generate-case, interrogate, evaluate)
-- API Gateway 설정
-- DynamoDB 테이블 생성
-
----
-
-## 🧩 기술 스택
-
-| 영역 | 기술 |
-|---|---|
-| 프레임워크 | Next.js 14 (App Router) |
-| 언어 | TypeScript |
-| 스타일 | Tailwind CSS (Noir 다크 테마) |
-| AI | AWS Bedrock (Claude 3.5 Sonnet) |
-| 드래그앤드롭 | 네이티브 HTML5 Drag API |
-| 인프라 | AWS SAM (Lambda + API GW + DynamoDB) |
-
----
-
-## 💀 게임 철학: 본격 추리물의 5대 원칙
-
-1. **페어 플레이** — 모든 단서는 공정하게 제공
-2. **녹스의 십계** — 범인은 초반 등장 인물, 초자연 금지
-3. **레드 헤링** — 의도적 미끼 증거로 난이도 조절
-4. **반전의 쾌감** — 자백 시 극적인 순간 연출
-5. **논리적 해결** — 논리적 사고로 충분히 도달 가능한 진실
-
----
-
-## 📊 점수 계산
-
-| 항목 | 점수 |
-|---|---|
-| 정답 기소 기본 | +1,000 |
-| 남은 시간 보너스 | 최대 +500 |
-| 명성 보너스 | 최대 +300 |
-| 증거 수집 (개당) | +50 |
-| 증거 연결 (개당) | +30 |
-| 잘못된 기소 | 명성 -30 |
-
----
-
-Made with ❤️ using Next.js + AWS Bedrock
