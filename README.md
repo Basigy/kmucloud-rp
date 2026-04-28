@@ -39,7 +39,7 @@ Google Gemini AI가 매번 새로운 살인 사건을 생성하고, 플레이어
 
 ## �🌐 접속 주소
 
-**http://107.23.137.237:3000**
+**http://3.88.209.176:3000**
 
 ---
 
@@ -117,7 +117,7 @@ S3_BUCKET_NAME=your-bucket-name
 
 ### 게임 플레이 테스트
 
-1. http://107.23.137.237:3000 접속
+1. http://3.88.209.176:3000 접속
 2. 난이도 선택 (초급 권장 — 용의자 3명, AP 40)
 3. 장소를 이동하며 조사 항목 클릭 → 증거 수집
 4. 용의자 심문 → 스트레스 수치 확인
@@ -135,10 +135,10 @@ Gemini API 연결 없이도 더미 사건 "재벌가의 비극"으로 테스트 
 
 ```bash
 # 사건 생성
-curl -X POST http://107.23.137.237:3000/api/generate \
+curl -X POST http://3.88.209.176:3000/api/generate \
   -H "Content-Type: application/json" \
   -d '{"difficulty":"easy"}'
 
 # 리더보드 조회
-curl http://107.23.137.237:3000/api/leaderboard?difficulty=all
+curl http://3.88.209.176:3000/api/leaderboard?difficulty=all
 ```
